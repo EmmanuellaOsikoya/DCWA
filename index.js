@@ -221,10 +221,109 @@ app.post('/students/add', (req, res) => {
         });
 });
 
-
+//LEFT JOIN was used to show the students regardless of whether they have a grade or a module associated with them
 app.get('/grades', (req, res) => {
-    res.send("Test 1 ");
-})
+    pool.query(`
+        SELECT 
+            s.name AS student_name, 
+            m.name AS module_name, 
+            g.grade
+        FROM 
+            student s
+        LEFT JOIN  
+            grade g ON s.sid = g.sid
+        LEFT JOIN 
+            module m ON g.mid = m.mid
+        ORDER BY 
+            s.name ASC, g.grade ASC
+    `)
+    .then((data) => { //creates the table that shows the students name, the modules that they are studying and their grade
+        let response = `
+           <html>
+    <head>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+            }
+            h1 {
+                color: #333;
+            }
+            a {
+                text-decoration: none;
+                color: #0066cc;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+            }
+            th, td {
+                padding: 10px;
+                text-align: left;
+                border: 1px solid black;
+            }
+            th {
+                background-color: #f2f2f2;
+            }
+            .student-header {
+                background-color: #f9f9f9;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Grades</h1>
+        <a href="/">Home</a>
+        <br><br>
+        <table>
+            <thead>
+                <tr>
+                    <th>Student Name</th>
+                    <th>Module Name</th>
+                    <th>Grade</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+            if (data.length > 0) {
+                let currentStudent = '';
+                data.forEach((row) => {
+                    // Checks if the student's name has changed, and create a new row for it
+                    if (row.student_name !== currentStudent) {
+                        currentStudent = row.student_name;
+                        response += `
+                            <tr class="student-header">
+                                <td colspan="3">${currentStudent}</td>
+                            </tr>`;
+                    }
+            
+                    // Now adds the student's grades as rows 
+                    response += `
+                        <tr>
+                            <td></td> <!-- Empty cell for student name -->
+                            <td>${row.module_name}</td>
+                            <td>${row.grade}</td>
+                        </tr>`;
+                });
+            
+                response += `</tbody></table>`;
+            } else {
+                response += `<p>No grades found.</p>`;
+            }
+            
+            response += `
+                </body>
+                </html>
+            `;
+
+        res.send(response);
+    })
+    .catch((error) => {
+        console.log(error);
+        res.status(500).send("Error retrieving grades: " + error.message);
+    });
+});
 
 app.get('/lecturers', (req, res) => {
     res.send("Test 2 ");
