@@ -5,6 +5,12 @@ var app = express();
 //can now use the index of promise-mysql
 var pmysql = require('promise-mysql')
 
+//can now use body parser middleware
+var bodyParser = require('body-parser');
+
+//body parser middleware added so that we can use forms to update and/or add students
+app.use(bodyParser.urlencoded({ extended: true }));
+
 
 //informs the user that the app is listening on port 3004
 app.listen(3005, () => {
@@ -35,7 +41,8 @@ app.get('/students', (req, res) => {
     pool.query('SELECT * FROM student')
         .then((data) => {
             // Starts the HTML structure so it can be a little bit more visually appealing to the user
-            let response = `
+            //response is responsible for the CSS and HTML that created the table
+            let response = ` 
                 <html>
                 <head>
                     <style>
@@ -67,12 +74,14 @@ app.get('/students', (req, res) => {
                 </head>
                 <body>
                     <h1>Students</h1>
+                    <a href='/students/add'>Add Student</a>
+                    <br>
                     <a href="/">Home</a>
                     <table>
                         <thead>
                             <tr>`;
 
-            // Added a table headers dynamically based on the column names
+            // Added table headers dynamically based on the column names
             if (data.length > 0) {
                 Object.keys(data[0]).forEach((column) => {
                     response += `<th>${column}</th>`;
@@ -80,7 +89,7 @@ app.get('/students', (req, res) => {
 
                 response += `</tr></thead><tbody>`;
 
-                // Add table rows for each student
+                // Adds table rows for each student
                 data.forEach((student) => {
                     response += `<tr>`;
                     Object.values(student).forEach((value) => {
@@ -105,6 +114,110 @@ app.get('/students', (req, res) => {
         .catch((error) => {
             console.log(error);
             res.status(500).send("Error retrieving students: " + error.message);
+        });
+});
+
+//this is responsible for allowing the user to add students to the database
+app.get('/students/add', (req, res) => {
+    let errorMessage = req.query.error || '';
+    let studentData = {
+        sid: req.query.sid || '',
+        name: req.query.name || '',
+        age: req.query.age || ''
+    };
+
+    //The form that the user fills out to add a new Student
+    res.send(`
+        <html>
+        <head>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    margin: 20px;
+                }
+                h1 {
+                    color: #333;
+                }
+                .error {
+                    color: red;
+                }
+                form {
+                    margin-top: 20px;
+                }
+                input {
+                    margin-bottom: 10px;
+                    padding: 5px;
+                    width: 300px;
+                }
+                button {
+                    padding: 5px 15px;
+                    background-color: #4CAF50;
+                    color: white;
+                    border: none;
+                    cursor: pointer;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Add Student</h1>
+            <a href="/students">Back to Students</a>
+    
+            ${errorMessage ? `<p class="error">${errorMessage}</p>` : ''}
+            
+            <form action="/students/add" method="POST">
+                <label for="id">Student ID (4 characters):</label><br>
+                <input type="text" id="sid" name="sid" value="${studentData.sid}" required maxlength="4"><br>
+                
+                <label for="name">Name (Min 2 characters):</label><br>
+                <input type="text" id="name" name="name" value="${studentData.name}" required minlength="2"><br>
+                
+                <label for="age">Age (18 or older):</label><br>
+                <input type="number" id="age" name="age" value="${studentData.age}" required min="18"><br>
+                
+                <button type="submit">Add Student</button>
+            </form>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/students/add', (req, res) => {
+    const { sid, name, age } = req.body; //extracts the sid, name, and age from the form submission
+
+    //If statements that check to see if the user has met all of the conditions required for a new Student to be added
+    if (!sid || sid.length !== 4) {
+        return res.redirect('/students/add?error=Student ID must be 4 characters.');
+    }
+
+    if (!name || name.length < 2) {
+        return res.redirect('/students/add?error=Name must be at least 2 characters long.');
+    }
+
+    if (!age || age < 18) {
+        return res.redirect('/students/add?error=Age must be 18 or older.');
+    }
+
+    //Checks if there is already a student with the same sid that the user has input for the new student
+    //Error message will be displayed to the user letting them know that a student with the sid they inputted already exists
+    pool.query('SELECT * FROM student WHERE sid = ?', [sid])
+        .then((existingStudent) => {
+            if (existingStudent.length > 0) {
+                return res.redirect('/students/add?error=Student with ID ' + sid + ' already exists.');
+            }
+
+            //If all of the conditions are met e.g. sid name age etc. the new student is added to the database and the user is also redirected to the /students page where they can now view the list of students
+            pool.query('INSERT INTO student (sid, name, age) VALUES (?, ?, ?)', [sid, name, age])
+                .then(() => {
+                    res.redirect('/students');
+                })
+                .catch((err) => {
+                    console.log(err);
+                    res.status(500).send('Error saving student to the database.');
+                });
+        })
+        .catch((err) => {
+            console.log(err);
+            res.status(500).send('Error checking existing student.');
         });
 });
 
