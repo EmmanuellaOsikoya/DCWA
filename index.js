@@ -34,15 +34,48 @@ pmysql.createPool({
 
 //GET requests that links to the students page, the grades page, and the lecturers page
 app.get('/', (req, res) => {
-    res.send("<h1>G00420464</h1><a href='/students'>Students</a><br><a href='/grades'>Grades</a><br><a href='/lecturers'>Lecturers</a>");
-})
+    res.send(`
+        <html>
+            <head>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                    }
+                    a {
+                        color: blue;
+                        text-decoration: none;
+                    }
+                    a:hover {
+                        text-decoration: underline;
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>G00420464</h1>
+                <a href='/students'>Students</a><br>
+                <a href='/grades'>Grades</a><br>
+                <a href='/lecturers'>Lecturers</a>
+            </body>
+        </html>
+    `);
+});
 
+
+// GET request to display the Students Page
 app.get('/students', (req, res) => {
-    pool.query('SELECT * FROM student')
-        .then((data) => {
-            // Starts the HTML structure so it can be a little bit more visually appealing to the user
-            //response is responsible for the CSS and HTML that created the table
-            let response = ` 
+    pool.query('SELECT * FROM student ORDER BY sid ASC') //gets all of the students data from the order of the ID (e.g. G001 G002 etc.)
+        .then((data) => { 
+            //creates rows containing the students id, name, age, and a button that allows the user to update the students details if they wish
+            let studentRows = data.map(student => ` 
+                <tr>
+                    <td>${student.sid}</td>
+                    <td>${student.name}</td>
+                    <td>${student.age}</td>
+                    <td><a href="/students/edit/${student.sid}">Update</a></td>
+                </tr>
+            `).join('');
+
+            res.send(`
                 <html>
                 <head>
                     <style>
@@ -50,70 +83,46 @@ app.get('/students', (req, res) => {
                             font-family: Arial, sans-serif;
                             margin: 20px;
                         }
-                        h1 {
-                            color: #333;
-                        }
-                        a {
-                            text-decoration: none;
-                            color: #0066cc;
-                        }
                         table {
-                            width: 100%;
                             border-collapse: collapse;
-                            margin-top: 20px;
+                            width: 100%;
                         }
                         th, td {
-                            padding: 10px;
-                            text-align: left;
                             border: 1px solid black;
+                            padding: 8px;
+                            text-align: left;
                         }
                         th {
                             background-color: #f2f2f2;
+                        }
+                        a {
+                            color: blue;
+                            text-decoration: none;
+                        }
+                        a:hover {
+                            text-decoration: underline;
                         }
                     </style>
                 </head>
                 <body>
                     <h1>Students</h1>
-                    <a href='/students/add'>Add Student</a>
-                    <br>
-                    <a href="/">Home</a>
+                    <a href="/students/add">Add Student</a> | <a href="/">Home</a>
                     <table>
-                        <thead>
-                            <tr>`;
-
-            // Added table headers dynamically based on the column names
-            if (data.length > 0) {
-                Object.keys(data[0]).forEach((column) => {
-                    response += `<th>${column}</th>`;
-                });
-
-                response += `</tr></thead><tbody>`;
-
-                // Adds table rows for each student
-                data.forEach((student) => {
-                    response += `<tr>`;
-                    Object.values(student).forEach((value) => {
-                        response += `<td>${value}</td>`;
-                    });
-                    response += `</tr>`;
-                });
-
-                response += `</tbody></table>`;
-            } else {
-                response += `<p>No students found.</p>`;
-            }
-
-            // Closing the HTML structure
-            response += `
+                        <tr>
+                            <th>Student ID</th>
+                            <th>Name</th>
+                            <th>Age</th>
+                            <th>Action</th>
+                        </tr>
+                        ${studentRows}
+                    </table>
                 </body>
-                </html>`;
-
-            // Send the HTML response
-            res.send(response);
-        })
-        .catch((error) => {
-            console.log(error);
-            res.status(500).send("Error retrieving students: " + error.message);
+                </html>
+            `);
+        }) //If there is an error while querying the database the catch block will log the error to the console for the user to see
+        .catch((err) => {
+            console.log(err);
+            res.status(500).send('Error retrieving students.');
         });
 });
 
@@ -221,6 +230,99 @@ app.post('/students/add', (req, res) => {
         });
 });
 
+// GET request to display the Update Student page
+app.get('/students/edit/:sid', (req, res) => {
+    const studentID = req.params.sid;
+
+    // Fetches the student details from the database
+    pool.query('SELECT * FROM student WHERE sid = ?', [studentID])
+        .then((data) => {
+            if (data.length > 0) {
+                const student = data[0];
+                res.send(`
+                    <html>
+                    <head>
+                        <style>
+                            body {
+                                font-family: Arial, sans-serif;
+                                margin: 20px;
+                            }
+                            h1 {
+                                color: #333;
+                            }
+                            .error {
+                                color: red;
+                            }
+                            form {
+                                margin-top: 20px;
+                            }
+                            input {
+                                margin-bottom: 10px;
+                                padding: 5px;
+                                width: 300px;
+                            }
+                            button {
+                                padding: 5px 15px;
+                                background-color: #4CAF50;
+                                color: white;
+                                border: none;
+                                cursor: pointer;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>Update Student</h1>
+                        <a href="/students">Back to Students</a>
+                        <form action="/students/edit/${student.sid}" method="POST">
+                            <label for="id">Student ID:</label><br>
+                            <input type="text" id="sid" name="sid" value="${student.sid}" readonly><br>
+                            
+                            <label for="name">Name (Min 2 characters):</label><br>
+                            <input type="text" id="name" name="name" value="${student.name}" required minlength="2"><br>
+                            
+                            <label for="age">Age (18 or older):</label><br>
+                            <input type="number" id="age" name="age" value="${student.age}" required min="18"><br>
+                            
+                            <button type="submit">Update</button>
+                        </form>
+                    </body>
+                    </html>
+                `);
+            } else {
+                res.status(404).send('Student not found.');
+            }
+        }) //error message that is displayed to the console when there is an issue retrieving student details
+        .catch((err) => {
+            console.log(err);
+            res.status(500).send('Error retrieving student details.');
+        });
+});
+
+// POST request to handle the form submission for updating the students from the list
+app.post('/students/edit/:sid', (req, res) => {
+    const studentID = req.params.sid;
+    const { name, age } = req.body;
+
+    // Validate inputs from the Update student form
+    if (!name || name.length < 2) {
+        return res.redirect(`/students/edit/${studentID}?error=Name must be at least 2 characters long.`);
+    }
+    if (!age || age < 18) {
+        return res.redirect(`/students/edit/${studentID}?error=Age must be 18 or older.`);
+    }
+
+    // Updates the student in the database
+    pool.query('UPDATE student SET name = ?, age = ? WHERE sid = ?', [name, age, studentID])
+        .then(() => {
+            res.redirect('/students'); // Redirects back to the students list after successful update
+        })
+        .catch((err) => {
+            console.log(err);
+            res.status(500).send('Error updating student in the database.');
+        });
+});
+
+
 //LEFT JOIN was used to show the students regardless of whether they have a grade or a module associated with them
 app.get('/grades', (req, res) => {
     pool.query(`
@@ -318,12 +420,24 @@ app.get('/grades', (req, res) => {
             `;
 
         res.send(response);
-    })
+    }) //error message that will be displayed to the user in the console
     .catch((error) => {
         console.log(error);
         res.status(500).send("Error retrieving grades: " + error.message);
     });
 });
+
+// Unfortunately the lecturers aspect of the project is not working apologies for this
+// Using a MongoDB database for the lecturers section of the app
+// const MongoClient = require('mongodb').MongoClient
+// MongoClient.connect('mongodb://127.0.0.1:27017')
+// .then((client) => {
+// db = client.db('proj2024MongoDB')
+// coll = db.collection('lecturers')
+// })
+// .catch((error) => {
+// console.log(error.message)
+// })
 
 app.get('/lecturers', (req, res) => {
     res.send("Test 2 ");
